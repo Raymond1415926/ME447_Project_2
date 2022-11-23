@@ -83,11 +83,11 @@ class CosseratRod():
     # Voronoi vectors
     self.kappa = np.zeros((3, self.n_voronoi)) #initialize but update later
     # Voronoi matrix
-
     self.bend_matrix = np.zeros((3,3,self.n_voronoi))
 
     for voronoi in range(self.n_voronoi):
-        self.bend_matrix[:,:,voronoi] = (self.element_bend_matrix[:,:, voronoi + 1] + self.element_bend_matrix[: ,: , voronoi]) / (2 * self.reference_voronoi_length[voronoi])
+        self.bend_matrix[:,:,voronoi] = (self.element_bend_matrix[:,:, voronoi + 1] * self.reference_lengths[voronoi + 1] \
+         + self.element_bend_matrix[: ,: , voronoi] * self.reference_lengths[voronoi]) / (2 * self.reference_voronoi_length[voronoi])
 
 def force_rule(self):
     pass
