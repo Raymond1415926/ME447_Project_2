@@ -3,62 +3,140 @@ from matplotlib import pyplot as plt
 
 # Variables on elements
 class CosseratRod():
-  def __init__(self):
-    n_elements = 10# pick some number or use the given values in snake.pdf
-    n_nodes = n_elements + 1
-    n_voronoi = n_elements - 1
+  def __init__(self, number_of_elements, total_length, density, radius, direction, normal, youngs_modulus, poisson_ratio):
+    #direction must be a unit vector
+    self.direction = direction / np.linalg.norm(direction)
 
-    # Here I am just showing the size of these arrays. You still need to initialize them with proper values.
-    # Nodal vectors has dimension (3, n_nodes)
-    position = np.zeros((3,n_nodes))
-    # Nodal scalars (n_nodes)
-    mass = np.zeros((n_nodes))
+    #properties for whole rod
+    self.youngs_modulus = youngs_modulus
+    self.shear_modulus = self.youngs_modulus / (poisson_ratio + 1)
+    self.n_elements = number_of_elements# pick some number or use the given values in snake.pdf
+    self.n_nodes = self.n_elements + 1
+    self.n_voronoi = self.n_elements - 1
+    self.total_length = total_length
+    self.density = density
+    self.radius = radius
+
+    # Element scalars
+    self.reference_lengths = np.ones((self.n_elements))* self.total_length/self.n_elements # Here I took total rod length as 1
+    self.current_lengths = self.reference_length.copy() #initially, current length is initial length
+    self.area = np.pi * self.radius**2 #initial
+    self.current_area = self.area * np.ones((self.n_elements))
+    self.current_radius = self.radius * np.ones((self.n_elements))
+    self.element_volume = self.area * self.current_lengths
+    self.element_mass = self.element_volume * density
+    self.element_dilation = np.ones((self.n_elements)) #initialize first, update later
+    #moment of area
+    self.I = np.zeros((3, self.n_elements))
+        #moment of inertia
+    self.J = np.zeros((self.n_elements))
+
+    for element in range(self.n_elements):
+        self.I[:, element] = self.current_area[element]**2/(4 * np.pi) * np.array([1, 1, 2])
+        self.J[element] = self.current_length[element]**2 * self.element_mass[element] / 2
+
+    #nodal mass
+    self.mass = np.zeros((self.n_elements + 1))
+    self.mass[:-1] += 0.5 * self.element_mass
+    self.mass[1:] += 0.5 * self.element_mass
+    
+    #nodal positions
+    self.position = np.zeros((3, self.n_elements + 1))
+    discretize_length = np.linspace(0, self.total_length, self.n_elements + 1)
+    for node in range(self.n_elements + 1):
+        self.position[:, node] =  discretize_length[node] * direction
 
     # Element vectors
-    tangents = np.zeros((3,n_elements))
-    # Element scalars
-    lengths = np.zeros((n_elements))
+    self.directors = np.zeros((3,3, self.n_elements))
+    self.tangents = self.position[:, 1:] - self.position[:, :-1]
+    self.tangents /= np.linalg.norm(self.tangents, axis=0, keepdims=True)
+    for idx in range(self.n_elements):
+        self.d1 = normal 
+        self.d3 = direction
+        self.d2 = np.cross(self.d3, self.d1) # binormal
+        self.directors[0, :, idx] = self.d1 # d1
+        self.directors[1, :, idx] = self.d2 # d2
+        self.directors[2, :, idx] = self.d3 # d3
+
+    self.sigma = np.zeros((3, self.n_elements)) #shear strain vector, initialize first, update later
+    
     # Element matrix
-    directors = np.zeros((3,3,n_elements))
+    self.element_bend_matrix = np.zeros((3, 3, self.n_elements))
+    self.shear_matrix = np.zeros((3, 3, self.n_elements))
+    
+    self.alpha = 4/3
+    for element in range(self.n_elements):
+        B1 = self.youngs_modulus * self.I[0, element]
+        B2 = self.youngs_modulus * self.I[1, element]
+        B3 = self.shear_modulus * self.I[2, element]
+        S1 = self.alpha * self.shear_modulus * self.current_area[element]
+        S2 = self.alpha * self.shear_modulus * self.current_area[element]
+        S3 = self.youngs_modulus * self.current_area[element]
 
-    # Voronoi vectors
-    kappa = np.zeros((3, n_voronoi))
+        self.element_bend_matrix[:, :, element] = np.diag([B1, B2, B3])
+        self.shear_matrix[:, :, element] = np.diag([S1, S2, S3])
+    
     # Voronoi scalars
-    voronoi_length = np.zeros((n_voronoi))
+    self.reference_voronoi_length = (self.reference_lengths[1:] - self.reference_lengths[:-1]) / 2
+    self.current_voronoi_length = self.reference_voronoi_length.copy()
+    self.voronoi_dilation = np.ones((self.n_elements)) #initialize first, update later
+    # Voronoi vectors
+    self.kappa = np.zeros((3, self.n_voronoi)) #initialize but update later
     # Voronoi matrix
-    bend_matrix = np.zeros((3, 3, n_voronoi))
 
-    density = 1000
-    radius = 0.01
-    lengths = np.ones((n_elements))* 1/n_elements # Here I took total rod length as 1
-    volume = np.pi * radius**2 * lengths
-    element_mass = volume * density
+    self.bend_matrix = np.zeros((3,3,self.n_voronoi))
 
-    # Now lets compute nodal masses. Distribute element masses on nodes
-    mass = np.zeros((n_elements+1))
-    mass[:-1] += 0.5 * element_mass
-    mass[1:] += 0.5 * element_mass
+    for voronoi in range(self.n_voronoi):
+        self.bend_matrix[:,:,voronoi] = (self.element_bend_matrix[:,:, voronoi + 1] + self.element_bend_matrix[: ,: , voronoi]) / (2 * self.reference_voronoi_length[voronoi])
 
-    position = np.zeros((3, n_elements+1))
-    position[2,:] = np.linspace(0, 1, n_elements+1) # I picked z direction, you can pick something as well
-    # Compute element tangents.
-    # Initially you can take d3 and element tangents same.
-    tangents = position[:, 1:] - position[:, :-1]
-    tangents /= np.linalg.norm(tangents, 
-                                    axis=0, 
-                                            keepdims=True)
-    # Pick a normal vector direction. You have to make sure normal vector is perpendicular to tangent and unit vector.
-    # I picked unit vector in y direction
-    normal = np.array([0, 1., 0.])
+def force_rule(self):
+    pass
+    # according to cosserate therory, solve for the linear and angular acceleartions
 
-    director = np.zeros((3,3, n_elements))
-    for idx in range(n_elements):
-      d1 = normal 
-      d3 = tangents[:,idx]
-      d2 = np.cross(d3, d1) # binormal
-      directors[0, :, idx] = d1 # d1
-      directors[1, :, idx] = d2 # d2
-      directors[2, :, idx] = d3 # d3
+def update(self):
+    pass
+    #update current force
+
+    #update current postion
+
+    #update current velocity
+
+    #update current length
+
+    #update current dilation
+
+    #update current tangent
+
+    #update current shear strain
+
+    #update current angular velocity
+
+    #update current director
+
+    #update current area
+
+    #update current moment of inertia
+
+    #update current moment of area
+
+    #update current element bending matrix
+
+    #update current element shear matrix
+
+    #update current external moment
+
+    #update current voronoi length
+
+    #update current voronoi dilation
+
+    #update current R = Q @ Q.T
+
+    #update current theta = np.acos((np.trace(R) - 1) / 2)
+
+    #update current voronoi kappa
+
+    #update current bend matrix
+
 
 # Difference operator (Delta^h operator in discreatized cosserat rod equations)
 def modified_diff(t_x):
