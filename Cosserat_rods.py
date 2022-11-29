@@ -37,8 +37,9 @@ class CosseratRod():
     self.J = np.zeros((self.n_elements))
 
     #initialize accelerations and velocities
-    self.acceleration = np.zeros([self.n_elements])
-    self.angular_acceleration = np.zeros([self.n_elements])
+    # self.acceleration = np.zeros([self.n_elements])
+    # self.angular_acceleration = np.zeros([self.n_elements])
+    
     self.velocitiy = np.zeros([self.n_elements])
     self.angular_velocity = np.zeros([self.n_elements])
 
@@ -208,10 +209,72 @@ def _batch_cross(first_vector_collection, second_vector_collection):
 
     return output_vector
 
-def force_rule(self):
+def _batch_matrix_transpose(input_matrix):
+    """
+    This function takes an batch input matrix and transpose it.
+    Parameters
+    ----------
+    input_matrix
+
+    Returns
+    -------
+    Notes
+    ----
+    Benchmark results,
+    Einsum: 2.08 µs ± 553 ns per loop
+    This version: 817 ns ± 15.2 ns per loop
+    """
+    output_matrix = np.empty(input_matrix.shape)
+    for i in range(input_matrix.shape[0]):
+        for j in range(input_matrix.shape[1]):
+            for k in range(input_matrix.shape[2]):
+                output_matrix[j, i, k] = input_matrix[i, j, k]
+    return output_matrix
+
+def force_rule(self, position):
     # according to cosserate therory, solve for the linear and angular acceleartions
+    # we basically need to update everything in order to solve for the right values
+    
+    
+    
+    # position of the current time is given already
+    self.position = position
+
+    # with the position, we need to update tangent and the length
+    self.tangents = self.position[:, 1:] - self.position[:, :-1]
+    self.current_lengths = np.linalg.norm(self.tangents, axis=0, keepdims=True)
+    self.tangents /= self.current_lengths
+
+    #update current dilation 
+    self.element_dilation = self.current_lengths / self.reference_lengths
+
+    #update current voronoi lengths
+    self.current_voronoi_lengths = (self.current_lengths[1:] - self.current_lengths[:-1]) / 2
+    
+    #update current voronoi dilation
+    self.voronoi_dilation = self.current_voronoi_lengths / self.reference_voronoi_lengths
+    
+    #we have everything we need, now we need to update sigma.
+    for element in range(self.n_elements):
+        #update current shear strain sigma
+        d3 = self.Q[2, :, element]
+        self.sigma[element] = self.Q[:,:,element] * (self.element_dilation[element] * self.tangents - d3)
+    
+    #sanity check: 
+    # Q depends on omega, update later
+    # keep S the same
+    # e is updated
+    # update force externally with external methods
+    # keep B the same
+    # kappa depends on Q, update later
+    # epsilon is updated
+    # tangent is updated
+    # sigma is updated
+    # keep reference length the same
+    
+
     #first solve for acceleration:
-    QT_S_sigma_over_e = _batch_matvec(_batch_matmul(self.Q.T, self.S), self.sigma) / self.element_dilation #batch transformation
+    QT_S_sigma_over_e = _batch_matvec(_batch_matmul(_batch_matrix_transpose(self.Q), self.S), self.sigma) / self.element_dilation #batch transformation
     acceleration = (delta_h(QT_S_sigma_over_e) + self.external_force) / self.mass
     
     #then solve for angular acceleration:
@@ -226,48 +289,17 @@ def force_rule(self):
     return acceleration, angular_acceleration
    
 def update(self):
-    #calculate accelerations
-    self.acceleration, self.angular_acceleration = self.force_rule()
     #update current force by specific force class
     #update current torque by specific torque class
 
-    #update current director before we update the angular velocity since this involves half step
-    half_step_angular_velocity = self.angular_velocity + self.angular_acceleration * dt / 2
-    for element in range(self.n_elements):
-        Q_t_half_dt = np.exp(-self.dt/2 + self.angular_velocity[element]) * self.Q[:,:,element]
-        self.Q[:,:,:element] = np.exp(-self.dt/2 * half_step_angular_velocity[element]) * Q_t_half_dt[element]
+    #position_verlet updates basically everything
 
+    #update current Q
+    #update current angular velocity
     #update current velocity
     #update current postion
     self.position, self.velocity = position_verlet(self.dt, self.position, self.velocity, self.acceleration)
 
-    #update current angular velocity. Unfortunatly there is no way to get half step acceleration
-    self.angular_position, self.angular_velocity = position_verlet(self.dt, self.angular_position, self.angular_velocity, self.angular_acceleration)
-    
-    
-    
-
-    #update current length
-    #update current tangent
-    self.tangents = self.position[:, 1:] - self.position[:, :-1]
-    self.current_lengths = np.linalg.norm(self.tangents, axis=0, keepdims=True)
-    self.tangents /= self.current_lengths
-
-    #update current dilation
-    self.element_dilation = self.current_lengths / self.reference_lengths
-
-    #update current voronoi lengths
-    self.current_voronoi_lengths = (self.current_lengths[1:] - self.current_lengths[:-1]) / 2
-    
-    #update current voronoi dilation
-    self.voronoi_dilation = self.current_voronoi_lengths / self.reference_voronoi_lengths
-    
-    
-    for element in range(self.n_elements):
-        #update current shear strain sigma
-        d3 = self.Q[2, :, element]
-        self.sigma[element] = self.Q[:,:,element] * (self.element_dilation[element] * self.tangents - d3)
-    
         #update current area
         # self.current_area = self.current_area / self.element_dilation
 
@@ -284,6 +316,7 @@ def update(self):
         # #update current element shear matrix
         # self.S[:,:,element] = self.S[:,:,element] / self.element_dilation[element]
 
+    #kappa
     for voronoi in range(self.n_voronoi):
         #update current R = Q @ Q.T
         R = self.Q[:,:,voronoi + 1] @ self.Q[:,:,voronoi].T
@@ -327,7 +360,7 @@ def alpha_h(t_x):
   # Using roll calculate the integral (ghost node of 0)
   return (0.5*(temp + np.roll(temp, -1)))[1:, :]
 
-def position_verlet(dt, x, v, force_rule):
+def position_verlet(self, dt, x, v):
     """Does one iteration/timestep using the Position verlet scheme
     
     Parameters
@@ -349,9 +382,30 @@ def position_verlet(dt, x, v, force_rule):
     v_n : float/array-like
         The quantity of interest at the Next time step
     """
-    temp_x = x + 0.5*dt*v
-    v_n = v + dt * force_rule(temp_x)
-    x_n = temp_x + 0.5 * dt * v_n
+    #update half step position
+    half_step_r = x + 0.5*dt*v
+
+    #update half step Q
+    Q_t_half_dt = np.zeros([3,3,self.n_elements])
+    for element in range(self.n_elements):
+        Q_t_half_dt[:,:,element] = np.exp(-self.dt/2 * self.angular_velocity[element]) * self.Q[:,:,element]
+    
+    #obtain half step acceleration
+    half_step_acceleration, half_step_angular_acceleration = self.force_rule(half_step_r)
+    
+    #update velocity
+    v_n = v + dt * half_step_acceleration
+
+    #update angular velocity
+    self.angular_velocity = self.angular_velocity + dt * half_step_angular_acceleration
+
+    #update position
+    x_n = half_step_r + 0.5 * dt * v_n
+
+    #update Q
+    for element in range(self.n_elements):
+        self.Q[:,:,element] = np.exp(-self.dt/2 * half_step_angular_acceleration) * Q_t_half_dt
+
     return x_n, v_n
 
 
