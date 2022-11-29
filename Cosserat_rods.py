@@ -3,7 +3,7 @@ from matplotlib import pyplot as plt
 
 # Variables on elements
 class CosseratRod():
-  def __init__(self, number_of_elements, total_length, density, radius, direction, normal, youngs_modulus, poisson_ratio, dt, total_time):
+  def __init__(self, number_of_elements, total_length, density, radius, direction, normal, youngs_modulus,  dt, total_time, poisson_ratio = 0.5, shear_modulus = 0):
     #direction must be a unit vector
     self.direction = direction / np.linalg.norm(direction)
 
@@ -12,7 +12,10 @@ class CosseratRod():
 
     #properties for whole rod
     self.youngs_modulus = youngs_modulus
-    self.shear_modulus = self.youngs_modulus / (poisson_ratio + 1)
+    if shear_modulus == 0:
+        self.shear_modulus = self.youngs_modulus / (poisson_ratio + 1)
+    else:
+        self.shear_modulus = shear_modulus
     self.n_elements = number_of_elements# pick some number or use the given values in snake.pdf
     self.n_nodes = self.n_elements + 1
     self.n_voronoi = self.n_elements - 1
@@ -39,7 +42,7 @@ class CosseratRod():
     #initialize accelerations and velocities
     # self.acceleration = np.zeros([self.n_elements])
     # self.angular_acceleration = np.zeros([self.n_elements])
-    
+
     self.velocitiy = np.zeros([self.n_elements])
     self.angular_velocity = np.zeros([self.n_elements])
 
@@ -298,7 +301,7 @@ def update(self):
     #update current angular velocity
     #update current velocity
     #update current postion
-    self.position, self.velocity = position_verlet(self.dt, self.position, self.velocity, self.acceleration)
+    self.position, self.velocity = self.position_verlet(self.dt, self.position, self.velocity)
 
         #update current area
         # self.current_area = self.current_area / self.element_dilation
@@ -415,9 +418,9 @@ density = 1000
 radius = 0.1
 direction = np.array([0, 0, 1])
 normal = np.array([0, 1, 0])
-youngs_modulus = 10e6
-poisson_ratio = 0.5
+youngs_modulus = 10e7
+shear_modulus = youngs_modulus * 2 / 3
 dt = 0.001
 total_time = 1
 rod = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, direction=direction,
-    normal=normal, youngs_modulus=youngs_modulus, poisson_ratio=poisson_ratio, dt=dt, total_time= total_time)
+    normal=normal, youngs_modulus=youngs_modulus, dt=dt, total_time= total_time, shear_modulus=shear_modulus)
