@@ -1,6 +1,6 @@
 import numpy as np
 from matplotlib import pyplot as plt
-
+from matrix_operators import _batch_matmul, _batch_matvec, _batch_cross, _batch_dot, _batch_product_i_k_to_ik, inplace_addition, inplace_substraction
 # Variables on elements
 class CosseratRod():
   def __init__(self, number_of_elements, total_length, density, radius, direction, normal, youngs_modulus,  dt, total_time, poisson_ratio = 0.5, shear_modulus = 0):
@@ -112,127 +112,6 @@ class CosseratRod():
     for voronoi in range(self.n_voronoi):
         self.B[:,:,voronoi] = (self.element_B[:,:, voronoi + 1] * self.reference_lengths[voronoi + 1] \
          + self.element_B[: ,: , voronoi] * self.reference_lengths[voronoi]) / (2 * self.reference_voronoi_lengths[voronoi])
-
-def _batch_matmul(first_matrix_collection, second_matrix_collection):
-    """
-    This is batch matrix matrix multiplication function. Only batch
-    of 3x3 matrices can be multiplied.
-    Parameters
-    ----------
-    first_matrix_collection
-    second_matrix_collection
-
-    Returns
-    -------
-    Notes
-    Microbenchmark results showed that for a block size of 200,
-    %timeit np.einsum("ijk,jlk->ilk", first_matrix_collection, second_matrix_collection)
-    8.45 µs ± 18.6 ns per loop
-    This version is
-    2.13 µs ± 1.01 µs per loop
-    """
-    blocksize = first_matrix_collection.shape[2]
-    output_matrix = np.zeros((3, 3, blocksize))
-
-    for i in range(3):
-        for j in range(3):
-            for m in range(3):
-                for k in range(blocksize):
-                    output_matrix[i, m, k] += (
-                        first_matrix_collection[i, j, k]
-                        * second_matrix_collection[j, m, k]
-                    )
-
-    return output_matrix
-
-def _batch_matvec(matrix_collection, vector_collection):
-    """
-    This function does batch matrix and batch vector product
-
-    Parameters
-    ----------
-    matrix_collection
-    vector_collection
-
-    Returns
-    -------
-    Notes
-    -----
-    Benchmark results, for a blocksize of 100, using timeit
-    Python einsum: 4.27 µs ± 66.1 ns per loop
-    This version: 1.18 µs ± 39.2 ns per loop
-    """
-    blocksize = vector_collection.shape[1]
-    print(blocksize, "of vector")
-    output_vector = np.zeros((3, blocksize))
-
-    for i in range(3):
-        for j in range(3):
-            for k in range(blocksize):
-                output_vector[i, k] += (
-                    matrix_collection[i, j, k] * vector_collection[j, k]
-                )
-    return output_vector
-
-def _batch_cross(first_vector_collection, second_vector_collection):
-    """
-    This function does cross product between two batch vectors.
-
-    Parameters
-    ----------
-    first_vector_collection
-    second_vector_collection
-
-    Returns
-    -------
-    Notes
-    ----
-    Benchmark results, for a blocksize of 100 using timeit
-    Python einsum: 14 µs ± 8.96 µs per loop
-    This version: 1.18 µs ± 141 ns per loop
-    """
-    blocksize = first_vector_collection.shape[1]
-    output_vector = np.empty((3, blocksize))
-
-    for k in range(blocksize):
-        output_vector[0, k] = (
-            first_vector_collection[1, k] * second_vector_collection[2, k]
-            - first_vector_collection[2, k] * second_vector_collection[1, k]
-        )
-
-        output_vector[1, k] = (
-            first_vector_collection[2, k] * second_vector_collection[0, k]
-            - first_vector_collection[0, k] * second_vector_collection[2, k]
-        )
-
-        output_vector[2, k] = (
-            first_vector_collection[0, k] * second_vector_collection[1, k]
-            - first_vector_collection[1, k] * second_vector_collection[0, k]
-        )
-
-    return output_vector
-
-def _batch_matrix_transpose(input_matrix):
-    """
-    This function takes an batch input matrix and transpose it.
-    Parameters
-    ----------
-    input_matrix
-
-    Returns
-    -------
-    Notes
-    ----
-    Benchmark results,
-    Einsum: 2.08 µs ± 553 ns per loop
-    This version: 817 ns ± 15.2 ns per loop
-    """
-    output_matrix = np.empty(input_matrix.shape)
-    for i in range(input_matrix.shape[0]):
-        for j in range(input_matrix.shape[1]):
-            for k in range(input_matrix.shape[2]):
-                output_matrix[j, i, k] = input_matrix[i, j, k]
-    return output_matrix
 
 def force_rule(self, position):
     # according to cosserate therory, solve for the linear and angular acceleartions
