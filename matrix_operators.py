@@ -71,7 +71,6 @@ def _batch_matvec(matrix_collection, vector_collection):
     This version: 1.18 µs ± 39.2 ns per loop
     """
     blocksize = vector_collection.shape[1]
-    print(blocksize, "of vector")
     output_vector = np.zeros((3, blocksize))
 
     for i in range(3):
@@ -157,6 +156,33 @@ def _batch_product_i_k_to_ik(vector1, vector2):
     for i in range(3):
         for k in range(blocksize):
             output_vector[i, k] = vector1[i] * vector2[k]
+
+    return output_vector
+
+def _batch_norm(vector):
+    """
+    This function computes norm of a batch vector
+    Parameters
+    ----------
+    vector
+
+    Returns
+    -------
+    Notes
+    -----
+    Benchmark results, for a blocksize of 100 using timeit
+    Python einsum: 4.26 µs ± 25.9 ns per loop
+    This version: 801 ns ± 3.9 ns per loop
+    """
+    blocksize = vector.shape[1]
+    output_vector = np.empty((blocksize))
+
+    for k in range(blocksize):
+        output_vector[k] = np.sqrt(
+            vector[0, k] * vector[0, k]
+            + vector[1, k] * vector[1, k]
+            + vector[2, k] * vector[2, k]
+        )
 
     return output_vector
 
