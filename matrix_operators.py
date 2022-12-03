@@ -230,3 +230,22 @@ def inplace_substraction(external_force_or_torque, force_or_torque):
     for i in range(3):
         for k in range(blocksize):
             external_force_or_torque[i, k] -= force_or_torque[i, k]
+
+# def _batch_matvec(first, second):
+#     return np.einsum("ijk,jk->ik", first, second, optimize=True)
+#
+#
+# def _batch_matmul(first, second):
+#     return np.einsum("ijk,jlk->ilk", first, second, optimize=True)
+#
+#
+# def _batch_cross(first, second):
+#     return np.cross(first, second, axisa=0, axisb=0).T
+#
+#
+# def _batch_matrix_transpose(matrix):
+#     return np.einsum("ijk->jik", matrix, optimize=True)
+#
+#
+# def _batch_norm(matrix):
+#     return np.sqrt(np.einsum("ij,ij->j", matrix, matrix, optimize=True))
