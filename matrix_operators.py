@@ -1,5 +1,8 @@
 import numpy as np
+from numba import njit
+from numba import cuda
 
+@njit(cache = True)
 def _batch_matrix_transpose(input_matrix):
     """
     This function takes an batch input matrix and transpose it.
@@ -21,6 +24,8 @@ def _batch_matrix_transpose(input_matrix):
             for k in range(input_matrix.shape[2]):
                 output_matrix[j, i, k] = input_matrix[i, j, k]
     return output_matrix
+
+@njit(cache = True)
 def _batch_matmul(first_matrix_collection, second_matrix_collection):
     """
     This is batch matrix matrix multiplication function. Only batch
@@ -53,6 +58,7 @@ def _batch_matmul(first_matrix_collection, second_matrix_collection):
 
     return output_matrix
 
+@njit(cache = True)
 def _batch_matvec(matrix_collection, vector_collection):
     """
     This function does batch matrix and batch vector product
@@ -81,6 +87,7 @@ def _batch_matvec(matrix_collection, vector_collection):
                 )
     return output_vector
 
+@njit(cache = True)
 def _batch_cross(first_vector_collection, second_vector_collection):
 
     # (3, n) (3, n) -> (3, n)
@@ -107,6 +114,7 @@ def _batch_cross(first_vector_collection, second_vector_collection):
 
     return output_vector
 
+@njit(cache = True)
 def _batch_dot(first_vector, second_vector):
     """
     This function does batch vec and batch vec dot product.
@@ -132,6 +140,7 @@ def _batch_dot(first_vector, second_vector):
 
     return output_vector
 
+@njit(cache = True)
 def _batch_product_i_k_to_ik(vector1, vector2):
     """
     This function does outer product following 'i,k->ik'.
@@ -159,6 +168,7 @@ def _batch_product_i_k_to_ik(vector1, vector2):
 
     return output_vector
 
+@njit(cache = True)
 def _batch_norm(vector):
     """
     This function computes norm of a batch vector
@@ -186,6 +196,7 @@ def _batch_norm(vector):
 
     return output_vector
 
+@njit(cache = True)
 def inplace_addition(external_force_or_torque, force_or_torque):
     """
     This function does inplace addition. First argument
@@ -209,6 +220,7 @@ def inplace_addition(external_force_or_torque, force_or_torque):
         for k in range(blocksize):
             external_force_or_torque[i, k] += force_or_torque[i, k]
 
+@njit(cache = True)
 def inplace_substraction(external_force_or_torque, force_or_torque):
     """
     This function does inplace substraction. First argument
