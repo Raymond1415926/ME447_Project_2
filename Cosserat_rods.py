@@ -1,9 +1,10 @@
 import numpy as np
 from matplotlib import pyplot as plt
-from matrix_operators import _batch_matmul, _batch_matvec, _batch_cross, _batch_matrix_transpose, _batch_norm
+from matrix_operators import _batch_matvec, _batch_cross, _batch_matrix_transpose, _batch_norm
 import copy
 from tqdm import tqdm
 import matplotlib.animation as manimation
+import time
 from numba import njit
 
 
@@ -127,38 +128,20 @@ class CosseratRod():
                                      + self.element_B[:, :, voronoi] * self.reference_lengths[voronoi]) / (
                                                 2 * self.reference_voronoi_lengths[voronoi])
     
-    def force_rule(self, positions):
+    def force_rule(self):
         
         
         #do this for milestone 1 only
-        self.external_forces[2, -1] = 15000
+        self.external_forces[0, -1] = -15
         
-        
-        
-        #use positions to recalculate sigma
-        self.positions = positions
 
-
-        self.tangents = np.subtract(self.positions[:, 1:], self.positions[: ,:-1])
-        self.current_lengths = _batch_norm(self.tangents)
-        self.tangents = np.divide(self.tangents, self.current_lengths)
-        self.current_voronoi_lengths = np.add(self.current_lengths[1:], self.current_lengths[:-1]) / 2
-        
-        #update dilatations
-        self.element_dilataton = np.divide(self.current_lengths, self.reference_lengths)
-        #update voronoi lengths
-        self.voronoi_dilataton = np.divide(self.current_voronoi_lengths, self.reference_voronoi_lengths)
-        
-        #update sigma
-        strain = np.subtract(np.multiply(self.element_dilataton, self.tangents), self.Q[2, :, :])
-        self.sigma = _batch_matvec(self.Q, strain)
         #transpose Q
         Qt = _batch_matrix_transpose(self.Q)
-        
+
         #apply damping force and torques
         self.external_forces = np.add(self.external_forces, - self.dissipation_constant * self.velocities) 
         self.external_torques = np.add(self.external_torques, - self.dissipation_constant * self.angular_velocities)
-     
+
         #stretch/strain internal force
         stretch_force = np.divide(_batch_matvec(Qt, _batch_matvec(self.S, self.sigma)), self.element_dilataton)
         stretch_force = self.delta_h(stretch_force)
@@ -168,25 +151,29 @@ class CosseratRod():
         
         #sum the force, divide by mass, get acceleration
         acceleration = np.divide(np.add(stretch_force, self.external_forces), self.mass)
-        
+
         #bend/twist internal couple
         #cubic dilatation
         epsilon3 = np.power(self.voronoi_dilataton, 3)
         twist_bent_couple1 = self.delta_h(np.divide(_batch_matvec(self.B, self.kappa), epsilon3))
-        twist_bend_couple2 = np.divide(_batch_cross(self.kappa, _batch_matvec(self.B, self.kappa)),\
-            epsilon3)
-        twist_bend_couple2 = self.alpha_h(np.multiply(twist_bend_couple2, self.reference_voronoi_lengths))
+        twist_bend_couple2 = self.alpha_h(self.reference_voronoi_lengths * \
+                             np.divide(_batch_cross(self.kappa, _batch_matvec(self.B, self.kappa)),\
+                                       epsilon3))
         twist_bend_couple = np.add(twist_bent_couple1, twist_bend_couple2)
         #shear/stretch internal couple
-        Qt_t = _batch_matvec(self.Q, self.tangents)
+        Q_t = _batch_matvec(self.Q, self.tangents)
         S_sigma = _batch_matvec(self.S, self.sigma)
-        shear_stretch_couple = np.multiply(_batch_cross(Qt_t, S_sigma), self.reference_lengths)
+        shear_stretch_couple = _batch_cross(Q_t, S_sigma) * self.reference_lengths
         
         #summing torqus
         internal_torques = np.add(twist_bend_couple, shear_stretch_couple)
         #calculate alpha
         alpha = np.multiply(np.add(internal_torques, self.external_torques), self.element_dilataton)
         alpha = _batch_matvec(self.J_inv, alpha)
+
+        #something is wrong with Q
+
+
 
         #clear forces and torques
         self.external_forces.fill(0.0)
@@ -202,7 +189,6 @@ class CosseratRod():
             self.angular_velocities[:, 0] = 0
             self.velocities[:, 0] = 0
             self.Q[:, :, 0] = self.ref_Q[:, :, 0]
-            self.Q_t_half_dt[:, :, 0] = self.ref_Q[:, :, 0]
 
     def add_forces_torques(self, forceobj):
         self.forces_torques_to_add.append(forceobj)
@@ -218,64 +204,58 @@ class CosseratRod():
                 forceobj.apply_torques()
             except AttributeError:
                 pass
+    def update_elements(self):
+        self.tangents = np.subtract(self.positions[:, 1:], self.positions[:, :-1])
+        self.current_lengths = _batch_norm(self.tangents)
+        self.tangents = np.divide(self.tangents, self.current_lengths)
+        self.current_voronoi_lengths = np.add(self.current_lengths[1:], self.current_lengths[:-1]) / 2
 
-    def rodrigues(self, dt, omega, directors):
-        n_elements = omega.shape[-1]
-        R = np.zeros((3, 3, n_elements))
-        norm_omega = _batch_norm(omega)
-        for i in range(n_elements):
-            angle = -0.5 * dt * norm_omega[i]
+        # update dilatations
+        self.element_dilataton = np.divide(self.current_lengths, self.reference_lengths)
+        # update voronoi lengths
+        self.voronoi_dilataton = np.divide(self.current_voronoi_lengths, self.reference_voronoi_lengths)
+
+        # update sigma
+        strain = np.subtract(np.multiply(self.element_dilataton, self.tangents), self.Q[2, :, :])
+        self.sigma = _batch_matvec(self.Q, strain)
+
+    def update_Q(self):
+        directors = np.zeros((3, 3, self.n_elements))
+        norm_omega = _batch_norm(self.angular_velocities)
+        for i in range(self.n_elements):
+            angle = -0.5 * self.dt * norm_omega[i]
+
             if norm_omega[i] < 1e-14:
                 about = np.zeros((3,))
             else:
-                about = omega[:, i] / norm_omega[i]
+                about = self.angular_velocities[:, i] / norm_omega[i]
             K = np.array([[0, -about[2], about[1]], [about[2], 0, -about[0]], [-about[1], about[0], 0]])
-
-
-            R[:, :, i] = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
-
-            directors[:, :, i] = R[:, :, i] @ directors[:, :, i]
-        return directors
+            R = np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+            directors[:, :, i] = R @ self.Q[:,:,i]
+        self.Q = directors
 
     def update(self):
         self.make_callback()
         self.position_verlet()
-        self.update_kappa()
+        # if(self.angular_velocities[0,-1] > np.pi/3):
+        #     input("exploded")
     
     def update_kappa(self):
-        """ Finds the angle and axes of rotation given any two frames
-
-        Parameters
-        ----------
-        t_frameone : frame/np.array
-            If frame object, then t_frame is given by the process function of
-            the frame
-            Else just a numpy array (vector/collection of vectors) which you
-            want to find the angle of
-        t_frametwo : frame/np.array
-            If frame object, then t_frame is given by the process function of
-            the frame
-            Else just a numpy array (vector/collection of vectors) which you
-            want to find the angle of
-        Both obey t_frametwo = R @ t_frameone
-
-        Returns
-        -------
-        angle : float
-            Returns the angle about which the frame rotates
-        axis : list/float like
-            Returns the axis about which the frames differ
-        """
-        for i in range(self.n_elements - 1):
+        curvature = np.zeros((3, self.n_voronoi))
+        for i in range(self.n_voronoi):
             R = self.Q[:, :, i + 1] @ self.Q[:, :, i].T
-            angle = np.arccos(0.5 * np.trace(R) - 0.5 - 1e-10)
-            K = (R - R.T) * 0.5 / np.sin(angle + 1e-14)
-            self.kappa[:, i] = np.array([-K[1, 2], K[0, 2], -K[0, 1]]) * angle
+            angle = np.arccos((np.trace(R) -1) / 2 - 1e-10)
+            if angle < 1e-10:
+                curvature[:, i] = np.zeros((3))
+            else:
+                K = (R - R.T) * 0.5 / np.sin(angle + 1e-14) * angle
+                curvature[:, i] = -np.array([K[2, 1], -K[2, 0], K[1, 0]]) / self.reference_voronoi_lengths[i]
+        self.kappa = curvature
 
     def run(self):
         steps = int(self.total_time // self.dt)
         for step in tqdm(range(steps)):
-            rod.update()
+            self.update()
     
     def make_callback(self):
         self.callback_params["positions"].append(copy.deepcopy(self.positions))
@@ -321,14 +301,18 @@ class CosseratRod():
             The quantity of interest at the Next time step
         """
         # update half step position
-        self.half_step_r = np.add(self.positions, 0.5 * self.dt * self.velocities)
+        self.positions = np.add(self.positions, 0.5 * self.dt * self.velocities)
         # update half step Q
-        self.Q_t_half_dt = self.rodrigues(self.dt, self.angular_velocities, self.Q)
+        self.apply_BC()
+        self.update_Q()
+        self.update_elements()
+        self.apply_BC()
+        self.update_kappa()
 
         self.apply_BC()
-        # obtain half step acceleration
 
-        half_step_acceleration, half_step_angular_acceleration = self.force_rule(self.half_step_r)
+        # obtain half step acceleration
+        half_step_acceleration, half_step_angular_acceleration = self.force_rule()
 
         # update velocity
         self.velocities = self.velocities + self.dt * half_step_acceleration
@@ -339,12 +323,12 @@ class CosseratRod():
         self.apply_BC()
 
         # update position
-        self.positions = np.add(self.half_step_r, 0.5 * self.dt * self.velocities)
-
-        # update Q
-        self.Q = self.rodrigues(self.dt, self.angular_velocities, self.Q_t_half_dt)
-
+        self.positions = np.add(self.positions, 0.5 * self.dt * self.velocities)
         self.apply_BC()
+        # update Q full step
+        self.update_Q()
+        self.apply_BC()
+
 
 
 
@@ -378,7 +362,7 @@ def dynamic_plotting_v2(ploting_parameters: dict):
     plt.ylabel("Deflection in lab frame x")
     plt.title("Deflection of a rod under torque")
     positions = ploting_parameters["positions"]
-    for step in tqdm(range(0, steps, 10)):
+    for step in tqdm(range(0, steps, 100)):
         ax.plot(positions[step][2], positions[step][0])
         plt.pause(wait)  # is necessary for the plot to update for some reason
 
@@ -396,7 +380,7 @@ def plot_video(
 
     positions_over_time = np.array(plot_params["positions"])
 
-    print("plot video")
+
     FFMpegWriter = manimation.writers["ffmpeg"]
     metadata = dict(title="Movie Test", artist="Matplotlib", comment="Movie support!")
     writer = FFMpegWriter(fps=fps, metadata=metadata)
@@ -410,7 +394,7 @@ def plot_video(
     # plt.axis("equal")
     steps = positions_over_time.shape[0]
     with writer.saving(fig, video_name, dpi=150):
-        for step in tqdm(range(0, steps, 5)):
+        for step in tqdm(range(0, steps, 50)):
             rod_lines_2d.set_xdata(positions_over_time[step][2])
             rod_lines_2d.set_ydata(positions_over_time[step][0])
             writer.grab_frame()
@@ -430,8 +414,8 @@ normal = np.array([0, 1, 0])
 youngs_modulus = 1e6
 shear_modulus = 1e4
 dt = 3e-4
-total_time = 200
-dissipation_constant = 0
+total_time = 20
+dissipation_constant = 0.1
 
 rod = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
@@ -440,5 +424,5 @@ rod = CosseratRod(number_of_elements=n_elements, total_length=length, density=de
 
 
 rod.run()
-dynamic_plotting(rod.callback_params)
+dynamic_plotting_v2(rod.callback_params)
 
