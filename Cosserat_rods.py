@@ -394,7 +394,7 @@ def plot_video(
     # plt.axis("equal")
     steps = positions_over_time.shape[0]
     with writer.saving(fig, video_name, dpi=150):
-        for step in tqdm(range(0, steps, 50)):
+        for step in tqdm(range(0, steps, 100)):
             rod_lines_2d.set_xdata(positions_over_time[step][2])
             rod_lines_2d.set_ydata(positions_over_time[step][0])
             writer.grab_frame()
@@ -414,7 +414,7 @@ normal = np.array([0, 1, 0])
 youngs_modulus = 1e6
 shear_modulus = 1e4
 dt = 3e-4
-total_time = 20
+total_time = 200
 dissipation_constant = 0.1
 
 rod = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
