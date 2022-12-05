@@ -132,7 +132,8 @@ class CosseratRod():
         # apply external forces and torques
         self.apply_forces_torques()
 
-        # debug the butterfly
+        # debug, add some fixed force or torque here
+
 
 
         #apply damping force and torques
@@ -395,16 +396,16 @@ The timoshenko force cases
 """
 Snake case
 """
-# n_elements = 3 #target 49
+# n_elements = 5 #target 49
 # length = 1
-# density = 1e3
+# density = 5e3
 # radius = 0.025
 # direction = np.array([0, 0, 1])
 # normal = np.array([0, 1, 0])
 # youngs_modulus = 1e7
 # shear_modulus = 2 * youngs_modulus / 3
-# dt = 2.5e-4
-# total_time = 0.5
+# dt = 2.5e-5
+# total_time = 10
 # dissipation_constant = 5
 # muscle_activation_period = 1
 # gravity_acceleration = 9.81
@@ -419,20 +420,20 @@ Snake case
 #                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
 #                   dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
 #                   shear_modulus=shear_modulus, fixed_BC=False, stretchable=False)
-# #
-# # muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
-# #                                wave_length=lambda_m,rest_lengths=snake.reference_lengths)
-# # #add force to rod
-# # snake.add_forces_torques(muscle_torques)
 #
+# muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
+#                                wave_length=lambda_m,rest_lengths=snake.reference_lengths)
+# #add force to rod
+# snake.add_forces_torques(muscle_torques)
+
 # snake.run()
-# dynamic_plotting_v2(snake.callback_params, every=1)
+# dynamic_plotting(snake.callback_params)
 """
 Butterfly
 """
-final_time = 20
+final_time = 10
 
-dt = 0.0001 # time-step
+dt = 0.01 # time-step
 
 n_elem = 4  # Change based on requirements, but be careful
 n_elem += n_elem % 2
@@ -486,5 +487,6 @@ for idx in range(butterfly.n_elements):
     butterfly.Q[0, :, idx] = butterfly.d1  # d1
     butterfly.Q[1, :, idx] = butterfly.d2  # d2
     butterfly.Q[2, :, idx] = butterfly.d3  # d3
+
 butterfly.run()
-plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.1],every=10)
+# plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.1],every=10)
