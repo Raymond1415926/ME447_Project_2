@@ -1,6 +1,6 @@
 import numpy as np
 from bspline import snake_bspline
-from matrix_operators import _batch_matmul, _batch_matvec, _batch_cross, _batch_dot, _batch_product_i_k_to_ik, inplace_addition, inplace_substraction
+from matrix_operators import _batch_matvec, _batch_dot, _batch_product_i_k_to_ik, inplace_addition, inplace_substraction
 
 # wall response function
 class AnisotropicFricton():
@@ -114,8 +114,6 @@ class AnisotropicFricton():
 
         return long_force
 
-
-
 class MuscleTorques():
 
     def __init__(
@@ -126,105 +124,79 @@ class MuscleTorques():
         direction,
         rest_lengths,
     ):
-        """
-
-        Parameters
-        ----------
-        b_coeff: nump.ndarray
-            1D array containing data with 'float' type.
-            Beta coefficients for beta-spline.
-        period: float
-            Period of traveling wave.
-        wave_length:
-            length of traveling wave
-        direction: numpy.ndarray
-           1D (dim) array containing data with 'float' type. Muscle torque direction.
-
-        """
-
+        # direction, direction of the torque applied
+        # b_coefficients, torque profile
+        # siniusoidal, torque magnitude traversing the snake
+        # wave_length, aka lambda
         self.direction = direction  # Direction torque applied
         self.angular_frequency = 2.0 * np.pi / period
         self.wave_number = 2.0 * np.pi / wave_length
-
-
-        # s is the position of nodes on the rod, we go from node=1 to node=nelem-1, because there is no
-        # torques applied by first and last node on elements. Reason is that we cannot apply torque in an
-        # infinitesimal segment at the beginning and end of rod, because there is no additional element
-        # (at element=-1 or element=n_elem+1) to provide internal torques to cancel out an external
-        # torque. This coupled with the requirement that the sum of all muscle torques has
-        # to be zero results in this condition.
         self.s = np.cumsum(rest_lengths)
         self.s /= self.s[-1]
 
-        assert b_coeff.size != 0, "Beta spline coefficient array (t_coeff) is empty"
-        my_spline, ctr_pts, ctr_coeffs = snake_bspline(b_coeff)
+        my_spline = snake_bspline(b_coeff)
         self.my_spline = my_spline(self.s)
 
 
-    def apply_torques(self, system, time: np.float64 = 0.0):
-        self.compute_muscle_torques(
-            time,
-            self.my_spline,
-            self.s,
-            self.angular_frequency,
-            self.wave_number,
-            self.direction,
-            system.director_collection,
-            system.external_torques,
-        )
+    def apply_torques(self, system):
+        #get current time
+        time = system.current_time
+        #calculate torque magnitude
+        torque_mag = self.my_spline * np.sin(self.angular_frequency * time - self.wave_number * self.s)
 
-    def compute_muscle_torques(
-        time,
-        my_spline,
-        s,
-        angular_frequency,
-        wave_number,
-        direction,
-        director_collection,
-        external_torques,
-    ):
-        # From the node 1 to node nelem-1
-        # Magnitude of the torque. Am = beta(s) * sin(2pi*t/T + 2pi*s/lambda + phi)
-        # There is an inconsistency with paper and Elastica cpp implementation. In paper sign in
-        # front of wave number is positive, in Elastica cpp it is negative.
-        torque_mag = my_spline * np.sin(angular_frequency * time - wave_number * s)
-
-        # Head and tail of the snake is opposite compared to elastica cpp. We need to iterate torque_mag
-        # from last to first element.
-        torque = _batch_product_i_k_to_ik(direction, torque_mag[::-1])
+        torque = _batch_product_i_k_to_ik(self.direction, torque_mag)
         inplace_addition(
-            external_torques[..., 1:],
-            _batch_matvec(director_collection, torque)[..., 1:],
+            system.external_torques[:, 1:],
+            _batch_matvec(system.Q, torque)[..., 1:],
         )
         inplace_substraction(
-            external_torques[..., :-1],
-            _batch_matvec(director_collection[..., :-1], torque[..., 1:]),
+            system.external_torques[..., :-1],
+            _batch_matvec(system.Q[..., :-1], torque[..., 1:]),
         )
 
-normal = np.array([[0,0,1]])
-normal = normal / np.linalg.norm(normal)
-wall_origin = np.array([[0,0,0]])
-radius = 1.1
+class GravityForces():
 
-positions = np.array([[0,0,0], [1,0,0], [2, 0, 0], [1,2,5]]).T
+    def __init__(self, acc_gravity=np.array([0.0, -9.80665, 0.0])):
+        self.acc_gravity = acc_gravity
 
+    def apply_forces(self, system, time=0.0):
+        self.compute_gravity_forces(
+            self.acc_gravity, system.mass, system.external_forces
+        )
 
-force = np.array([[0,0,-3], [0, 1, 2], [3,4,5]]).T
+    def compute_gravity_forces(acc_gravity, mass, external_forces):
+        inplace_addition(external_forces, _batch_product_i_k_to_ik(acc_gravity, mass))
 
-directions = force / np.linalg.norm(force, axis = 0)
+class TimoshenkoForce():
+    def __init__(self, applied_force):
+        self.applied_force = applied_force
 
-velocities = np.array([[2,5,-3], [1,1,1], [3,5,2], [2,9,-8]]).T
+    def apply_forces(self, system):
+        system.external_forces[:, -1] += self.applied_force
 
-wall_stiffness = 1
-dissipation_coefficient = 0.2
-
-obj = AnisotropicFricton(wall_stiffness, dissipation_coefficient, normal, wall_origin)
-
-tangents = positions[:, 1:] - positions[:, :-1]
-tangents = tangents / np.linalg.norm(tangents, axis = 0)
+# normal = np.array([[0,0,1]])
+# normal = normal / np.linalg.norm(normal)
+# wall_origin = np.array([[0,0,0]])
+# radius = 1.1
+#
+# positions = np.array([[0,0,0], [1,0,0], [2, 0, 0], [1,2,5]]).T
+#
+#
+# force = np.array([[0,0,-3], [0, 1, 2], [3,4,5]]).T
+#
+# directions = force / np.linalg.norm(force, axis = 0)
+#
+# velocities = np.array([[2,5,-3], [1,1,1], [3,5,2], [2,9,-8]]).T
+#
+# wall_stiffness = 1
+# dissipation_coefficient = 0.2
+#
+# obj = AnisotropicFricton(wall_stiffness, dissipation_coefficient, normal, wall_origin)
+#
+# tangents = positions[:, 1:] - positions[:, :-1]
+# tangents = tangents / np.linalg.norm(tangents, axis = 0)
 
 # print(obj.element_positions(positions), "position test")
 # print(obj.element_velocities(velocities), "v test")
 # print(obj.wall_response(wall_stiffness, dissipation_coefficient, normal, force, velocities, wall_origin, positions, radius))
-wall_response = obj.wall_response(wall_stiffness, dissipation_coefficient, normal, force, velocities, wall_origin, positions, radius)
-print(obj.longtitudinal_force(force, wall_response, velocities, tangents, normal))
+# wall_response = obj.wall_response(wall_stiffness, dissipation_coefficient, normal, force, velocities, wall_origin, positions, radius)
