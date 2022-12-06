@@ -1,7 +1,7 @@
 import numpy as np
 from bspline import snake_bspline
 from matrix_operators import _batch_matvec, _batch_dot, _batch_product_i_k_to_ik, inplace_addition, inplace_substraction
-
+import copy
 # wall response function
 class AnisotropicFricton():
     def __init__(self, wall_stiffness, dissipation_coefficient, wall_normal_direction, wall_origin):
@@ -61,8 +61,9 @@ class AnisotropicFricton():
         # project force onto normal direction
         if wall_normal_direction.shape[0] == 1: wall_normal_direction = wall_normal_direction.T
         if wall_origin.shape[0] == 1: wall_origin = wall_origin.T
-        normal_force = np.dot(resultant_forces.T, wall_normal_direction).T * wall_normal_direction
-        n_elements = normal_force.shape[1]
+        element_resultant_forces = 0.5 * resultant_forces[:,1:] + 0.5 * resultant_forces[:,-1]
+        element_normal_force = np.dot(element_resultant_forces.T, wall_normal_direction).T * wall_normal_direction
+        n_elements = element_normal_force.shape[1]
         # find penetration
         # find the projection of positions + radius into the wall
         e_positions = self.element_positions(positions)
@@ -73,7 +74,7 @@ class AnisotropicFricton():
 
         e_veloities = self.element_velocities(velocities)
         damping_force = dissipation_coefficient * np.dot(e_veloities.T, wall_normal_direction).T * wall_normal_direction
-        wall_response_force = np.heaviside(penetration, 1) * (-normal_force + elastic_force - damping_force)
+        wall_response_force = np.heaviside(penetration, 1) * (-element_normal_force + elastic_force - damping_force)
 
         return wall_response_force
 
@@ -114,6 +115,12 @@ class AnisotropicFricton():
 
         return long_force
 
+    def apply_interactions(self, system):
+        wall_response = self.wall_response(self.wall_stiffness,self.dissipation_coefficient,self.wall_normal_direction,\
+                                           system.total_forces,system.velocities,self.wall_origin,system.positions, system.radius)
+        inplace_addition(system.total_forces[:,1:], wall_response * 0.5)
+        inplace_addition(system.total_forces[:,:-1], wall_response * 0.5)
+
 class MuscleTorques():
 
     def __init__(
@@ -131,7 +138,7 @@ class MuscleTorques():
         self.direction = direction  # Direction torque applied
         self.angular_frequency = 2.0 * np.pi / period
         self.wave_number = 2.0 * np.pi / wave_length
-        self.s = np.cumsum(rest_lengths)
+        self.s = np.cumsum(copy.deepcopy(rest_lengths))
         self.s /= self.s[-1]
 
         my_spline = snake_bspline(b_coeff)
@@ -159,13 +166,13 @@ class GravityForces():
     def __init__(self, acc_gravity=np.array([0.0, -9.80665, 0.0])):
         self.acc_gravity = acc_gravity
 
-    def apply_forces(self, system, time=0.0):
+    def apply_forces(self, system):
         self.compute_gravity_forces(
-            self.acc_gravity, system.mass, system.external_forces
+            system.mass, system.external_forces
         )
 
-    def compute_gravity_forces(acc_gravity, mass, external_forces):
-        inplace_addition(external_forces, _batch_product_i_k_to_ik(acc_gravity, mass))
+    def compute_gravity_forces(self, mass, external_forces):
+        inplace_addition(external_forces, _batch_product_i_k_to_ik(self.acc_gravity, mass))
 
 class TimoshenkoForce():
     def __init__(self, applied_force):
@@ -182,7 +189,7 @@ class TimoshenkoForce():
 # positions = np.array([[0,0,0], [1,0,0], [2, 0, 0], [1,2,5]]).T
 #
 #
-# force = np.array([[0,0,-3], [0, 1, 2], [3,4,5]]).T
+# force = np.array([[0,0,-3], [0, 1, 2], [3,4,5], [3,2,4]]).T
 #
 # directions = force / np.linalg.norm(force, axis = 0)
 #

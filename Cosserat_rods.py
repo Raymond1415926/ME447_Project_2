@@ -4,7 +4,7 @@ from matrix_operators import _batch_matvec, _batch_cross, _batch_matrix_transpos
 import copy
 from tqdm import tqdm
 import matplotlib.animation as manimation
-from snake_force import TimoshenkoForce, MuscleTorques
+from snake_force import TimoshenkoForce, MuscleTorques, GravityForces
 import time
 from numba import njit
 
@@ -15,13 +15,14 @@ class CosseratRod():
 
     def __init__(self, number_of_elements, total_length, density, radius,  normal, youngs_modulus, dt,
                  total_time, dissipation_constant = 0.1, direction = np.array([0,0,1]), poisson_ratio=0.5, shear_modulus=0,  \
-                 fixed_BC = False, stretchable = True):
+                 fixed_BC = False, middle_BC = False):
         self.count = 1
         # direction must be a unit vector
-        self.stretchable = stretchable
         self.forces_torques_to_add = []
+        self.interactions_to_add = []
         self.direction = direction / np.sqrt(direction[0]**2 + direction[1]**2 + direction[2]**2)
         self.fixed_BC = fixed_BC
+        self.middle_BC = middle_BC
         # callback parameters
         self.callback_params = {}  # an empty dictionary that stores data for each time steps
         self.callback_params['positions'] = []
@@ -46,8 +47,8 @@ class CosseratRod():
         self.dissipation_constant = dissipation_constant
 
         # Element scalars
-        self.reference_lengths = np.ones((self.n_elements)) * self.total_length / self.n_elements  #length of elements
-        self.current_lengths = self.reference_lengths.copy()  # initially, current length is initial length
+        self.current_lengths = np.ones((self.n_elements)) * self.total_length / self.n_elements  #length of elements
+        self.reference_lengths = copy.deepcopy(self.current_lengths)
         self.area = np.pi * self.radius ** 2  # initial
         self.element_volume = self.area * self.reference_lengths[0]  # volume is not changing
         self.element_mass = self.element_volume * density
@@ -82,6 +83,7 @@ class CosseratRod():
         for node in range(self.n_nodes):
             self.positions[:, node] = discretize_lengths[node] * direction
         # Element vectors
+        self.reference_positions = self.positions.copy()
         self.Q = np.zeros((3, 3, self.n_elements))  # directors
         self.tangents = self.positions[:, 1:] - self.positions[:, :-1]
         self.tangents = np.divide(self.tangents, self.current_lengths)
@@ -117,6 +119,8 @@ class CosseratRod():
         self.external_torques = np.zeros([3, self.n_elements])
         self.dissipation_force = np.zeros([3, self.n_nodes])
         self.dissipation_torque = np.zeros([3, self.n_elements])
+        self.total_forces = np.zeros([3, self.n_nodes])
+        self.total_torques = np.zeros([3, self.n_elements])
 
         # Voronoi scalars
         self.reference_voronoi_lengths = (self.reference_lengths[1:] + self.reference_lengths[:-1]) / 2
@@ -135,9 +139,7 @@ class CosseratRod():
     def force_rule(self):
         # apply external forces and torques
         self.apply_forces_torques()
-
         # debug, add some fixed force or torque here
-
 
         #calculate damping force and torques
         element_velocity = 0.5 * (self.velocities[:, 1:] + self.velocities[:, :-1])
@@ -151,9 +153,11 @@ class CosseratRod():
         #stretch/strain internal force
         stretch_force = _batch_matvec(Qt, _batch_matvec(self.S, self.sigma)) / self.element_dilatation
         stretch_force = self.delta_h(stretch_force)
+
         #sum the force, divide by mass, get acceleration
         internal_force = stretch_force + self.dissipation_force
-        self.accelerations = (internal_force + self.external_forces ) / self.mass
+        self.total_forces = internal_force + self.external_forces + self.dissipation_force
+
         #bend/twist internal couple
         #cubic dilatation
         epsilon3 = np.power(self.voronoi_dilatation, 3)
@@ -168,14 +172,24 @@ class CosseratRod():
         shear_stretch_couple = _batch_cross(Q_t, S_sigma) * self.reference_lengths
         #summing torqus
         internal_torques = np.add(np.add(twist_bend_couple, shear_stretch_couple), self.dissipation_torque)
-        #calculate alpha
-        self.angular_accelerations = np.multiply(np.add(internal_torques, self.external_torques), self.element_dilatation)
-        self.angular_accelerations = _batch_matvec(self.J_inv, self.angular_accelerations)
+        self.total_torques = internal_torques + self.external_torques + self.dissipation_torque
+
+        #apply interactions, because they depend on total forces and torques
+        self.apply_interactions()
+
+        #calculate accelerations, both angular and translational
+        self.accelerations = self.total_forces / self.mass
+        self.angular_accelerations = _batch_matvec(self.J_inv, \
+                                                   np.multiply(self.total_torques, self.element_dilatation))
+
         #clear forces and torques
         self.external_forces.fill(0.0)
         self.external_torques.fill(0.0)
         self.dissipation_force.fill(0.0)
         self.dissipation_torque.fill(0.0)
+        self.external_forces.fill(0.0)
+        self.external_torques.fill(0.0)
+
 
 
     def apply_BC(self):
@@ -184,9 +198,23 @@ class CosseratRod():
             self.angular_velocities[:, 0] = 0
             self.velocities[:, 0] = 0
             self.Q[:, :, 0] = self.ref_Q[:, :, 0]
+        if self.middle_BC:
+            middle_node = self.n_nodes // 2
+            self.positions[:, middle_node] = self.reference_positions[:, middle_node]
+            self.velocities[:, middle_node] = 0
+
+    def add_interactions(self, interactionobj):
+        self.interactions_to_add.append(interactionobj)
 
     def add_forces_torques(self, forceobj):
         self.forces_torques_to_add.append(forceobj)
+
+    def apply_interactions(self):
+        for interactionobj in self.interactions_to_add:
+            try:
+                interactionobj.apply_interactions()
+            except AttributeError:
+                pass
 
     def apply_forces_torques(self):
 
@@ -206,11 +234,10 @@ class CosseratRod():
         self.tangents = np.divide(self.tangents, self.current_lengths)
         self.current_voronoi_lengths = np.add(self.current_lengths[1:], self.current_lengths[:-1]) / 2
 
-        if self.stretchable:
-            # update dilatations
-            self.element_dilatation = np.divide(self.current_lengths, self.reference_lengths)
-            # update voronoi lengths
-            self.voronoi_dilatation = np.divide(self.current_voronoi_lengths, self.reference_voronoi_lengths)
+        # update dilatations
+        self.element_dilatation = np.divide(self.current_lengths, self.reference_lengths)
+        # update voronoi lengths
+        self.voronoi_dilatation = np.divide(self.current_voronoi_lengths, self.reference_voronoi_lengths)
         # update sigma
         strain = np.subtract(np.multiply(self.element_dilatation, self.tangents), self.Q[2, :, :])
         self.sigma = _batch_matvec(self.Q, strain)
@@ -235,7 +262,7 @@ class CosseratRod():
         self.position_verlet()
         # if(self.angular_velocities[0,-1] > np.pi/3):
         #     input("exploded")
-    
+
     def update_kappa(self):
         curvature = np.zeros((3, self.n_voronoi))
         for i in range(self.n_voronoi):
@@ -396,18 +423,18 @@ The timoshenko force cases
 """
 Snake case
 """
-n_elements = 20 #target 49
+n_elements = 50 #target 49
 length = 1
 density = 5e3
-radius = 0.05
+radius = 0.025
 direction = np.array([0, 0, 1])
 normal = np.array([0, 1, 0])
 youngs_modulus = 1e7
 shear_modulus = 2 * youngs_modulus / 3
 dt = 2.5e-5
-total_time = 1
+total_time = 3
 dissipation_constant = 5
-muscle_activation_period = 1
+muscle_activation_period = 1.0
 gravity_acceleration = 9.81
 #anisotropic frictions are built in
 #threshold velocitiey is built in
@@ -419,13 +446,13 @@ b_coeffs = np.array([0, 25, 25, 25, 25, 0])
 snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
                   dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
-                  shear_modulus=shear_modulus, fixed_BC=False, stretchable=False)
+                  shear_modulus=shear_modulus, fixed_BC=False)
 
 muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
                                wave_length=lambda_m,rest_lengths=snake.reference_lengths)
+
 #add force to rod
 snake.add_forces_torques(muscle_torques)
-
 snake.run()
 plot_video(snake.callback_params, every = 200)
 """
@@ -487,6 +514,32 @@ Butterfly
 #     butterfly.Q[0, :, idx] = butterfly.d1  # d1
 #     butterfly.Q[1, :, idx] = butterfly.d2  # d2
 #     butterfly.Q[2, :, idx] = butterfly.d3  # d3
-#
+# gravity = GravityForces()
+# butterfly.add_forces_torques(gravity)
 # butterfly.run()
-# plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.0],every=5)
+# plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-20,1.0],every=5)
+"""
+Extra benchmark, gravity on, center node holding up
+"""
+# n_elements = 10
+# length = 3
+# density = 5e3
+# radius = 0.25
+# direction = np.array([0, 0, 1])
+# normal = np.array([0, 1, 0])
+# youngs_modulus = 1e6
+# shear_modulus = 1e4
+# dt = 3e-4
+# total_time = 2
+# dissipation_constant = 0.1
+#
+# rod = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
+#                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
+#                   dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
+#                   shear_modulus=shear_modulus, middle_BC=True)
+#
+# # timoshenko_force = TimoshenkoForce(applied_force= [-15,0,0])
+# gravity = GravityForces(acc_gravity = np.array([-9.81, 0.0, 0.0]))
+# rod.add_forces_torques(gravity)
+# rod.run()
+# plot_video(rod.callback_params)
