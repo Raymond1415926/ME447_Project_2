@@ -1,14 +1,15 @@
 import numpy as np
 from bspline import snake_bspline
-from matrix_operators import _batch_matvec, _batch_dot, _batch_product_i_k_to_ik, inplace_addition, inplace_substraction
+from matrix_operators import _batch_matvec, _batch_dot, _batch_product_i_k_to_ik, inplace_addition, inplace_substraction,\
+    _batch_norm, _batch_cross
 import copy
 # wall response function
 class AnisotropicFricton():
     def __init__(self, wall_stiffness, dissipation_coefficient, wall_normal_direction, wall_origin):
         self.wall_stiffness = wall_stiffness
         self.dissipation_coefficient = dissipation_coefficient
-        self.wall_normal_direction = wall_normal_direction
-        self.wall_origin = wall_origin
+        self.wall_normal_direction = wall_normal_direction.reshape([1,3])
+        self.wall_origin = wall_origin.reshape([1,3])
 
 
 
@@ -34,7 +35,7 @@ class AnisotropicFricton():
                 is_static[element] = True
                 # forward
                 if v_mag_along_longtitude[element] >= 0:
-                    fric_coeff[element] = 2 * fric_coeff
+                    fric_coeff[element] = 2 * fwd_kinetic
                 else:
                     fric_coeff[element] = 1.5 * fwd_kinetic
         return fric_coeff, is_static
@@ -59,67 +60,69 @@ class AnisotropicFricton():
     def wall_response(self, wall_stiffness, dissipation_coefficient, wall_normal_direction, resultant_forces, velocities, wall_origin,
                       positions, radius):
         # project force onto normal direction
-        if wall_normal_direction.shape[0] == 1: wall_normal_direction = wall_normal_direction.T
-        if wall_origin.shape[0] == 1: wall_origin = wall_origin.T
-        element_resultant_forces = 0.5 * resultant_forces[:,1:] + 0.5 * resultant_forces[:,-1]
-        element_normal_force = np.dot(element_resultant_forces.T, wall_normal_direction).T * wall_normal_direction
-        n_elements = element_normal_force.shape[1]
+        if wall_normal_direction.shape[0] == 1:
+            wall_normal_direction = wall_normal_direction.T
+        if wall_origin.shape[0] == 1:
+            wall_origin = wall_origin.T
+        normal_force = np.dot(resultant_forces.T, wall_normal_direction).T * wall_normal_direction
+        n_nodes = normal_force.shape[1]
         # find penetration
         # find the projection of positions + radius into the wall
-        e_positions = self.element_positions(positions)
-        wall_origins = wall_origin * np.ones([1, n_elements])  # convert to array
-        distance_from_plane = np.dot((e_positions - wall_origins).T, wall_normal_direction).T
-        penetration = radius - distance_from_plane
+        wall_origins = wall_origin * np.ones([1, n_nodes])  # convert to array
+        distance_from_plane = np.dot((positions - wall_origins).T, wall_normal_direction).T
+        penetration = (radius - distance_from_plane).flatten()
         elastic_force = wall_stiffness * penetration * wall_normal_direction
-
-        e_veloities = self.element_velocities(velocities)
-        damping_force = dissipation_coefficient * np.dot(e_veloities.T, wall_normal_direction).T * wall_normal_direction
-        wall_response_force = np.heaviside(penetration, 1) * (-element_normal_force + elastic_force - damping_force)
-
+        damp_force = dissipation_coefficient * np.dot(velocities.T, wall_normal_direction).T * wall_normal_direction
+        wall_response_force = np.heaviside(penetration, 1) * (-normal_force + elastic_force - damp_force)
         return wall_response_force
 
     def longtitudinal_force(self, resultant_force, wall_response, velocities, tangents, wall_normal_direction):
-        response_mag = np.linalg.norm(wall_response, axis = 0)
-
+        response_mag = _batch_norm(wall_response) #node forces
+        e_response_mag = 0.5 * response_mag[:-1] + 0.5 * response_mag[1:]
         if wall_normal_direction.shape[0] == 1: wall_normal_direction = wall_normal_direction.T
         #obtain element velocity
         e_velocities = self.element_velocities(velocities)
+        e_forces = 0.5 * resultant_force[:,:-1] + 0.5 * resultant_force[:,1:]
+        n_elements = e_response_mag.shape[0]
+        e_long_force = np.zeros([3, n_elements])
 
-        n_elements = resultant_force.shape[1]
-        long_force = np.zeros([3, n_elements])
-
-        wall_normal_directions = wall_normal_direction * np.ones([1, n_elements])
+        e_wall_normal_directions = wall_normal_direction * np.ones([1, n_elements])
         #first, we need to find how much of the tangent is parallel
-
-        lateral_tangent_on_plane = np.cross(tangents, wall_normal_directions, axis = 0)
-        longtitude_tangent_on_plane = np.cross(wall_normal_directions, lateral_tangent_on_plane, axis = 0)
+        lateral_tangent_on_plane = _batch_cross(tangents, e_wall_normal_directions)
+        longtitude_tangent_on_plane = _batch_cross(e_wall_normal_directions, lateral_tangent_on_plane)
        #velocity along longtitude
         v_along_longtitude = _batch_dot(longtitude_tangent_on_plane, e_velocities) * longtitude_tangent_on_plane
-        v_mag_along_longtitude = np.linalg.norm(v_along_longtitude, axis = 0)
-
+        v_mag_along_longtitude = _batch_norm(v_along_longtitude)
         #force along longtitude
-        f_along_longtitude = _batch_dot(longtitude_tangent_on_plane, resultant_force) * longtitude_tangent_on_plane
-        f_mag_along_longtitude = np.linalg.norm(f_along_longtitude, axis = 0)
+        f_along_longtitude = _batch_dot(longtitude_tangent_on_plane, e_forces) * longtitude_tangent_on_plane
+        f_mag_along_longtitude = _batch_norm(f_along_longtitude)
 
         #we need to find the friction coefficients
         fric_coeff, is_static = self.calc_anisotropic_coefficient(v_mag_along_longtitude, n_elements)
 
         for element in range(n_elements):
             if is_static[element]:
-
-                long_force[:, element] = -max(-f_mag_along_longtitude[element], fric_coeff[element] * response_mag[element]) * f_along_longtitude[:, element] / f_mag_along_longtitude[element]
+                if f_mag_along_longtitude[element] < 1e-14:
+                    e_long_force[:, element] = 0
+                else:
+                    e_long_force[:, element] = -max(-f_mag_along_longtitude[element], fric_coeff[element] * response_mag[element])\
+                                           * f_along_longtitude[:, element] / f_mag_along_longtitude[element]
             else:
-
-                long_force[:, element] = -fric_coeff[element] * response_mag[element] * v_along_longtitude[:, element] / v_mag_along_longtitude[element]
-
+                    e_long_force[:, element] = -fric_coeff[element] * response_mag[element]\
+                                           * v_along_longtitude[:, element] / v_mag_along_longtitude[element]
+        long_force = np.zeros([3, n_elements + 1]) #we want it back in nodal
+        long_force[:, :-1] += e_long_force * 0.5
+        long_force[:, 1:] += e_long_force * 0.5
 
         return long_force
 
     def apply_interactions(self, system):
         wall_response = self.wall_response(self.wall_stiffness,self.dissipation_coefficient,self.wall_normal_direction,\
                                            system.total_forces,system.velocities,self.wall_origin,system.positions, system.radius)
-        inplace_addition(system.total_forces[:,1:], wall_response * 0.5)
-        inplace_addition(system.total_forces[:,:-1], wall_response * 0.5)
+        long_force = self.longtitudinal_force(system.total_forces, wall_response, system.velocities, system.tangents, self.wall_normal_direction)
+        inplace_addition(system.total_forces, wall_response)
+        inplace_addition(system.total_forces, long_force)
+
 
 class MuscleTorques():
 

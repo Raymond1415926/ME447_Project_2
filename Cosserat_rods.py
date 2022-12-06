@@ -4,7 +4,7 @@ from matrix_operators import _batch_matvec, _batch_cross, _batch_matrix_transpos
 import copy
 from tqdm import tqdm
 import matplotlib.animation as manimation
-from snake_force import TimoshenkoForce, MuscleTorques, GravityForces
+from snake_force import TimoshenkoForce, MuscleTorques, GravityForces, AnisotropicFricton
 import time
 from numba import njit
 
@@ -212,7 +212,7 @@ class CosseratRod():
     def apply_interactions(self):
         for interactionobj in self.interactions_to_add:
             try:
-                interactionobj.apply_interactions()
+                interactionobj.apply_interactions(self)
             except AttributeError:
                 pass
 
@@ -432,7 +432,7 @@ normal = np.array([0, 1, 0])
 youngs_modulus = 1e7
 shear_modulus = 2 * youngs_modulus / 3
 dt = 2.5e-5
-total_time = 3
+total_time = 5
 dissipation_constant = 5
 muscle_activation_period = 1.0
 gravity_acceleration = 9.81
@@ -442,6 +442,7 @@ wall_stiffness = 1
 ground_dissipation = 1e-6
 lambda_m = 0.5 #wavelength, sub m to not be confused with lambda function
 b_coeffs = np.array([0, 25, 25, 25, 25, 0])
+wall_origin = np.array([0, -radius, 0])
 
 snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
@@ -450,9 +451,12 @@ snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=
 
 muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
                                wave_length=lambda_m,rest_lengths=snake.reference_lengths)
-
+friction_and_wall = AnisotropicFricton(wall_stiffness, ground_dissipation, normal, wall_origin)
 #add force to rod
+gravity = GravityForces()
 snake.add_forces_torques(muscle_torques)
+snake.add_forces_torques(gravity)
+snake.add_interactions(friction_and_wall)
 snake.run()
 plot_video(snake.callback_params, every = 200)
 """
