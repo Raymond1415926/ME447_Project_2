@@ -140,12 +140,11 @@ class CosseratRod():
 
 
         #calculate damping force and torques
-        self.dissipation_force = np.zeros([3, self.n_nodes])
         element_velocity = 0.5 * (self.velocities[:, 1:] + self.velocities[:, :-1])
-        element_dissipation_force = - np.multiply(self.dissipation_constant * element_velocity, self.current_lengths)
+        element_dissipation_force = - self.dissipation_constant * np.multiply(element_velocity, self.current_lengths)
         self.dissipation_force[:,:-1] = 0.5 * element_dissipation_force
         self.dissipation_force[:, 1:] += 0.5 * element_dissipation_force
-        self.dissipation_torque = -np.multiply(self.dissipation_constant * self.angular_velocities, self.current_lengths)
+        self.dissipation_torque = - self.dissipation_constant * np.multiply(self.angular_velocities, self.current_lengths)
 
         # transpose Q
         Qt = _batch_matrix_transpose(self.Q)
@@ -175,6 +174,8 @@ class CosseratRod():
         #clear forces and torques
         self.external_forces.fill(0.0)
         self.external_torques.fill(0.0)
+        self.dissipation_force.fill(0.0)
+        self.dissipation_torque.fill(0.0)
 
 
     def apply_BC(self):
@@ -395,97 +396,97 @@ The timoshenko force cases
 """
 Snake case
 """
-# n_elements = 5 #target 49
-# length = 1
-# density = 5e3
-# radius = 0.025
-# direction = np.array([0, 0, 1])
-# normal = np.array([0, 1, 0])
-# youngs_modulus = 1e7
-# shear_modulus = 2 * youngs_modulus / 3
-# dt = 2.5e-5
-# total_time = 10
-# dissipation_constant = 5
-# muscle_activation_period = 1
-# gravity_acceleration = 9.81
-# #anisotropic frictions are built in
-# #threshold velocitiey is built in
-# wall_stiffness = 1
-# ground_dissipation = 1e-6
-# lambda_m = 0.5 #wavelength, sub m to not be confused with lambda function
-# b_coeffs = np.array([0, 25, 25, 25, 25, 0])
-#
-# snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
-#                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
-#                   dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
-#                   shear_modulus=shear_modulus, fixed_BC=False, stretchable=False)
-#
-# muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
-#                                wave_length=lambda_m,rest_lengths=snake.reference_lengths)
-# #add force to rod
-# snake.add_forces_torques(muscle_torques)
-#
-# snake.run()
-# plot_video(snake.callback_params)
+n_elements = 20 #target 49
+length = 1
+density = 5e3
+radius = 0.05
+direction = np.array([0, 0, 1])
+normal = np.array([0, 1, 0])
+youngs_modulus = 1e7
+shear_modulus = 2 * youngs_modulus / 3
+dt = 2.5e-5
+total_time = 1
+dissipation_constant = 5
+muscle_activation_period = 1
+gravity_acceleration = 9.81
+#anisotropic frictions are built in
+#threshold velocitiey is built in
+wall_stiffness = 1
+ground_dissipation = 1e-6
+lambda_m = 0.5 #wavelength, sub m to not be confused with lambda function
+b_coeffs = np.array([0, 25, 25, 25, 25, 0])
+
+snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
+                  direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
+                  dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
+                  shear_modulus=shear_modulus, fixed_BC=False, stretchable=False)
+
+muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
+                               wave_length=lambda_m,rest_lengths=snake.reference_lengths)
+#add force to rod
+snake.add_forces_torques(muscle_torques)
+
+snake.run()
+plot_video(snake.callback_params, every = 200)
 """
 Butterfly
 """
-final_time = 40
-
-dt = 0.01 # time-step
-
-n_elem = 4  # Change based on requirements, but be careful
-n_elem += n_elem % 2
-half_n_elem = n_elem // 2
-
-origin = np.zeros((3, 1))
-angle_of_inclination = np.deg2rad(45.0)
-
-# in-plane
-horizontal_direction = np.array([0.0, 0.0, 1.0]).reshape(-1, 1)
-vertical_direction = np.array([1.0, 0.0, 0.0]).reshape(-1, 1)
-
-# out-of-plane
-normal = np.array([0.0, 1.0, 0.0])
-
-total_length = 3.0
-base_radius = 0.25
-base_area = np.pi * base_radius ** 2
-density = 5000
-youngs_modulus = 1e4
-poisson_ratio = 0.5
-shear_modulus = youngs_modulus/1.5
-dissipation_constant = 0
-positions = np.empty((3, n_elem + 1))
-dl = total_length / n_elem
-direction = np.array([0,0,1])
-# First half of positions stem from slope angle_of_inclination
-first_half = np.arange(half_n_elem + 1.0).reshape(1, -1)
-positions[..., : half_n_elem + 1] = origin + dl * first_half * (
-    np.cos(angle_of_inclination) * horizontal_direction
-    + np.sin(angle_of_inclination) * vertical_direction
-)
-positions[..., half_n_elem:] = positions[
-    ..., half_n_elem : half_n_elem + 1
-] + dl * first_half * (
-    np.cos(angle_of_inclination) * horizontal_direction
-    - np.sin(angle_of_inclination) * vertical_direction
-)
-
-butterfly = CosseratRod(number_of_elements=n_elem, total_length=total_length, density=density, radius=base_radius, \
-                  direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
-                  dt=dt, total_time=final_time, dissipation_constant = dissipation_constant, \
-                  shear_modulus=shear_modulus, fixed_BC=False, stretchable=True)
-butterfly.positions = positions
-butterfly.tangents = butterfly.positions[:, 1:] - butterfly.positions[:, :-1]
-butterfly.tangents = np.divide(butterfly.tangents, butterfly.current_lengths)
-for idx in range(butterfly.n_elements):
-    butterfly.d1 = normal
-    butterfly.d3 = butterfly.tangents[:, idx]
-    butterfly.d2 = np.cross(butterfly.d3, butterfly.d1)  # binormal vectors
-    butterfly.Q[0, :, idx] = butterfly.d1  # d1
-    butterfly.Q[1, :, idx] = butterfly.d2  # d2
-    butterfly.Q[2, :, idx] = butterfly.d3  # d3
-
-butterfly.run()
-plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.0],every=5)
+# final_time = 40
+#
+# dt = 0.01 # time-step
+#
+# n_elem = 4  # Change based on requirements, but be careful
+# n_elem += n_elem % 2
+# half_n_elem = n_elem // 2
+#
+# origin = np.zeros((3, 1))
+# angle_of_inclination = np.deg2rad(45.0)
+#
+# # in-plane
+# horizontal_direction = np.array([0.0, 0.0, 1.0]).reshape(-1, 1)
+# vertical_direction = np.array([1.0, 0.0, 0.0]).reshape(-1, 1)
+#
+# # out-of-plane
+# normal = np.array([0.0, 1.0, 0.0])
+#
+# total_length = 3.0
+# base_radius = 0.25
+# base_area = np.pi * base_radius ** 2
+# density = 5000
+# youngs_modulus = 1e4
+# poisson_ratio = 0.5
+# shear_modulus = youngs_modulus/1.5
+# dissipation_constant = 0
+# positions = np.empty((3, n_elem + 1))
+# dl = total_length / n_elem
+# direction = np.array([0,0,1])
+# # First half of positions stem from slope angle_of_inclination
+# first_half = np.arange(half_n_elem + 1.0).reshape(1, -1)
+# positions[..., : half_n_elem + 1] = origin + dl * first_half * (
+#     np.cos(angle_of_inclination) * horizontal_direction
+#     + np.sin(angle_of_inclination) * vertical_direction
+# )
+# positions[..., half_n_elem:] = positions[
+#     ..., half_n_elem : half_n_elem + 1
+# ] + dl * first_half * (
+#     np.cos(angle_of_inclination) * horizontal_direction
+#     - np.sin(angle_of_inclination) * vertical_direction
+# )
+#
+# butterfly = CosseratRod(number_of_elements=n_elem, total_length=total_length, density=density, radius=base_radius, \
+#                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
+#                   dt=dt, total_time=final_time, dissipation_constant = dissipation_constant, \
+#                   shear_modulus=shear_modulus, fixed_BC=False, stretchable=True)
+# butterfly.positions = positions
+# butterfly.tangents = butterfly.positions[:, 1:] - butterfly.positions[:, :-1]
+# butterfly.tangents = np.divide(butterfly.tangents, butterfly.current_lengths)
+# for idx in range(butterfly.n_elements):
+#     butterfly.d1 = normal
+#     butterfly.d3 = butterfly.tangents[:, idx]
+#     butterfly.d2 = np.cross(butterfly.d3, butterfly.d1)  # binormal vectors
+#     butterfly.Q[0, :, idx] = butterfly.d1  # d1
+#     butterfly.Q[1, :, idx] = butterfly.d2  # d2
+#     butterfly.Q[2, :, idx] = butterfly.d3  # d3
+#
+# butterfly.run()
+# plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.0],every=5)
