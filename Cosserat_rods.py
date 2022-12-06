@@ -341,7 +341,7 @@ def dynamic_plotting_v2(ploting_parameters: dict, xlim=[-1.0,3.0],ylim=[0.0,1.0]
     plt.show()
 
 # make videos
-def plot_video(plot_params: dict, video_name="video.mp4", fps=100, xlim=(0, 4), ylim=(-.3, .2), every = 10):
+def plot_video(plot_params: dict, video_name="video.mp4", fps=30, xlim=(0, 4), ylim=(-.3, .2), every = 10):
 
     positions_over_time = np.array(plot_params["positions"])
 
@@ -452,10 +452,10 @@ total_length = 3.0
 base_radius = 0.25
 base_area = np.pi * base_radius ** 2
 density = 5000
-youngs_modulus = 1e6
+youngs_modulus = 1e4
 poisson_ratio = 0.5
-shear_modulus = 10**6
-dissipation_constant = 50
+shear_modulus = youngs_modulus/1.5
+dissipation_constant = 0
 positions = np.empty((3, n_elem + 1))
 dl = total_length / n_elem
 direction = np.array([0,0,1])
@@ -488,4 +488,4 @@ for idx in range(butterfly.n_elements):
     butterfly.Q[2, :, idx] = butterfly.d3  # d3
 
 butterfly.run()
-plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.0],every=10)
+plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-0.1,1.0],every=5)
