@@ -369,7 +369,7 @@ def dynamic_plotting_v2(ploting_parameters: dict, xlim=[-1.0,3.0],ylim=[0.0,1.0]
     plt.show()
 
 # make videos
-def plot_video(plot_params: dict, video_name="video.mp4", fps=30, xlim=(0, 4), ylim=(-.3, .2), every = 10):
+def plot_video(plot_params: dict, video_name="video.mp4", fps=50, xlim=(0, 4), ylim=(-2, 2), every = 10):
 
     positions_over_time = np.array(plot_params["positions"])
 
@@ -423,7 +423,7 @@ The timoshenko force cases
 """
 Snake case
 """
-n_elements = 50 #target 49
+n_elements = 20 #target 49
 length = 1
 density = 5e3
 radius = 0.025
@@ -440,8 +440,8 @@ gravity_acceleration = 9.81
 #threshold velocitiey is built in
 wall_stiffness = 1
 ground_dissipation = 1e-6
-lambda_m = 0.5 #wavelength, sub m to not be confused with lambda function
-b_coeffs = np.array([0, 25, 25, 25, 25, 0])
+lambda_m = 0.97 #wavelength, sub m to not be confused with lambda function
+b_coeffs = np.array([0, 17.4, 48.5, 5.4, 17.4, 0])
 wall_origin = np.array([0, -radius, 0])
 
 snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
@@ -458,7 +458,7 @@ snake.add_forces_torques(muscle_torques)
 snake.add_forces_torques(gravity)
 snake.add_interactions(friction_and_wall)
 snake.run()
-plot_video(snake.callback_params, every = 200)
+plot_video(snake.callback_params, every = 500)
 """
 Butterfly
 """
