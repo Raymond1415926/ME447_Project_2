@@ -435,7 +435,7 @@ The timoshenko force cases
 """
 Snake case
 """
-def run_snake(b_coeff=np.array([0,17.4,48.5,5.4,14.7,0]), wave_length=0.97, make_video = False, run_time = 1, n_elements = 10):
+def run_snake(b_coeff=np.array([0,17.4,48.5,5.4,14.7,0]), wave_length=0.97, make_video = False, run_time = 2, n_elements = 10):
     if type(b_coeff) != np.ndarray: b_coeff=np.array(b_coeff)
     n_elements = n_elements #target 49
     length = 1
@@ -475,7 +475,7 @@ def run_snake(b_coeff=np.array([0,17.4,48.5,5.4,14.7,0]), wave_length=0.97, make
     if make_video:
         plot_video(snake.callback_params, every=500)
     return snake.distance_traveled
-run_snake(make_video=False,b_coeff=[0,17.4,48.5,5.4,14.7,0])
+# run_snake(make_video=False,b_coeff=[0,17.4,48.5,5.4,14.7,0])
 """
 Butterfly
 """
