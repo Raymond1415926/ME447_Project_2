@@ -276,12 +276,24 @@ class CosseratRod():
                 curvature[:, i] = -np.array([-K[1, 2], K[0, 2], K[0, 1]]) / self.reference_voronoi_lengths[i]
         self.kappa = curvature
 
+    def compute_position_center_of_mass(self):
+        """
+        Compute position center of mass of the rod at the instance.
+        """
+        mass_times_position = np.einsum("j,ij->ij", self.mass, self.positions)
+        sum_mass_times_position = np.einsum("ij->i", mass_times_position)
+
+        return sum_mass_times_position / np.sum(self.mass)
     def run(self):
+        self.start_center_of_mass = self.compute_position_center_of_mass()
         steps = int(self.total_time // self.dt)
         for step in tqdm(range(steps)):
             #update time
             self.current_time = self.time[step]
             self.update()
+            if step == steps - 1: #the last step
+                self.end_center_of_mass = self.compute_position_center_of_mass()
+        self.distance_traveled = np.linalg.norm(self.end_center_of_mass - self.start_center_of_mass)
 
     def make_callback(self):
         self.callback_params["positions"].append(copy.deepcopy(self.positions))
@@ -423,42 +435,47 @@ The timoshenko force cases
 """
 Snake case
 """
-n_elements = 20 #target 49
-length = 1
-density = 5e3
-radius = 0.025
-direction = np.array([0, 0, 1])
-normal = np.array([0, 1, 0])
-youngs_modulus = 1e7
-shear_modulus = 2 * youngs_modulus / 3
-dt = 2.5e-5
-total_time = 5
-dissipation_constant = 5
-muscle_activation_period = 1.0
-gravity_acceleration = 9.81
-#anisotropic frictions are built in
-#threshold velocitiey is built in
-wall_stiffness = 1
-ground_dissipation = 1e-6
-lambda_m = 0.97 #wavelength, sub m to not be confused with lambda function
-b_coeffs = np.array([0, 17.4, 48.5, 5.4, 17.4, 0])
-wall_origin = np.array([0, -radius, 0])
+def run_snake(b_coeff=np.array([0,17.4,48.5,5.4,14.7,0]), wave_length=0.97, make_video = False, run_time = 2, n_elements = 10):
+    if type(b_coeff) != np.ndarray: b_coeff=np.array(b_coeff)
+    n_elements = n_elements #target 49
+    length = 1
+    density = 5e3
+    radius = 0.025
+    direction = np.array([0, 0, 1])
+    normal = np.array([0, 1, 0])
+    youngs_modulus = 1e7
+    shear_modulus = 2 * youngs_modulus / 3
+    dt = 2.5e-5
+    total_time = run_time
+    dissipation_constant = 5
+    muscle_activation_period = 1.0
+    gravity_acceleration = 9.81
+    #anisotropic frictions are built in
+    #threshold velocitiey is built in
+    wall_stiffness = 1
+    ground_dissipation = 1e-6
+    lambda_m = wave_length #wavelength, sub m to not be confused with lambda function
+    b_coeffs = b_coeff
+    wall_origin = np.array([0, -radius, 0])
 
-snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
-                  direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
-                  dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
-                  shear_modulus=shear_modulus, fixed_BC=False)
+    snake = CosseratRod(number_of_elements=n_elements, total_length=length, density=density, radius=radius, \
+                      direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
+                      dt=dt, total_time=total_time, dissipation_constant = dissipation_constant, \
+                      shear_modulus=shear_modulus, fixed_BC=False)
 
-muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
-                               wave_length=lambda_m,rest_lengths=snake.reference_lengths)
-friction_and_wall = AnisotropicFricton(wall_stiffness, ground_dissipation, normal, wall_origin)
-#add force to rod
-gravity = GravityForces()
-snake.add_forces_torques(muscle_torques)
-snake.add_forces_torques(gravity)
-snake.add_interactions(friction_and_wall)
-snake.run()
-plot_video(snake.callback_params, every = 500)
+    muscle_torques = MuscleTorques(b_coeff=b_coeffs, period=muscle_activation_period, direction=normal,\
+                                   wave_length=lambda_m,rest_lengths=snake.reference_lengths)
+    friction_and_wall = AnisotropicFricton(wall_stiffness, ground_dissipation, normal, wall_origin)
+    #add force to rod
+    gravity = GravityForces()
+    snake.add_forces_torques(muscle_torques)
+    snake.add_forces_torques(gravity)
+    snake.add_interactions(friction_and_wall)
+    snake.run()
+    if make_video:
+        plot_video(snake.callback_params, every=500)
+    return snake.distance_traveled
+run_snake(make_video=False,b_coeff=[0,17.4,48.5,5.4,14.7,0])
 """
 Butterfly
 """

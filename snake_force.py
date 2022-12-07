@@ -152,7 +152,7 @@ class MuscleTorques():
         #get current time
         time = system.current_time
         #calculate torque magnitude
-        torque_mag = self.my_spline * np.sin(self.angular_frequency * time - self.wave_number * self.s)
+        torque_mag = self.my_spline * np.sin(-self.angular_frequency * time + self.wave_number * self.s)
 
         torque = _batch_product_i_k_to_ik(self.direction, torque_mag)
         inplace_addition(
