@@ -1,3 +1,4 @@
+import numpy as np
 from numpy.random import multivariate_normal
 from cosserat_rods import*
 class CMAES:
@@ -15,7 +16,7 @@ class CMAES:
         
         # Optimal popsize 
         self.popsize = popsize
-        self.mu = popsize // 2
+        self.mu = popsize // 5
         
         # Update weights later on
         # Constant weight policy
@@ -38,7 +39,7 @@ class CMAES:
         self.generations = 0
         
         # Options
- 
+        self.generations_to_run = 40
         # Sigma adaptation
         # cs is short for c_sigma
         self.cs = kwargs.get("cs", (2.0 + self.mueff) / (self.dim + self.mueff + 5.0))
@@ -71,8 +72,11 @@ class CMAES:
         pop_fitness = np.zeros(self.popsize)
         for idx in range(pop_size):
             pop_fitness[idx] = problem.calc_fitness(b_coeff_and_lambda=population[idx])
+            print(f'{idx} of {pop_size} in generation')
+        print(pop_fitness)
         index = np.argsort(pop_fitness)
-        population = population[index]
+        print(index[::-1])
+        population = population[index[::-1]]
         # population.sort(key=lambda ind: problem(ind[0], ind[1]))
         # population.sort(key=problem)
         
@@ -135,7 +139,7 @@ class CMAES:
         # At the start, clear all stored cache and start a new campaign
         self.reset()
         
-        for i in tqdm(range(40)):
+        for i in tqdm(range(self.generations_to_run)):
             # Sample the population here!
             population = list(multivariate_normal(self.centroid, self.sigma**2 * self.C, self.popsize))
             populations = np.array(population)
@@ -144,6 +148,7 @@ class CMAES:
             # print(np.array(population).shape)
             self.generations += 1
             print(f"generation {self.generations}")
+            print(f'current best: {populations[0]}')
         else:
             return population[0]
         
@@ -161,23 +166,27 @@ class SnakeProblem:
     def __init__(self):
         pass
     def calc_fitness(self,b_coeff_and_lambda):
-        b_coeff = b_coeff_and_lambda[:-1]
-        lambda_m = b_coeff_and_lambda[-1]
-        distance_traveled = run_snake(b_coeff=b_coeff,wave_length=lambda_m,n_elements=10,run_time=2)
+        b_coeff = b_coeff_and_lambda[0:4]
+        lambda_m = b_coeff_and_lambda[4]
+        b_coeffs = np.zeros(6)
+        b_coeffs[1:5] = b_coeff
+        distance_traveled = run_snake(b_coeff=b_coeff,wave_length=lambda_m,n_elements=10,run_time=0.25)
         boundary = 50
         b_coeff = np.array([b_coeff])
         fitness = distance_traveled
         abs_coeff = np.abs(b_coeff)
-        penalty = 1000
+        penalty = 10
         if np.any(abs_coeff) > boundary:
             for idx in np.where(np.abs(b_coeff) > 50):
-                fitness -= np.abs(b_coeff)[idx] * penalty
+                fitness -= abs_coeff[idx] * penalty
+        if lambda_m < 0:
+                fitness -= abs(lambda_m) * penalty * 30
         return fitness
 
-initial_mean = np.array([0,25,25,25,25,0.97])
+initial_mean = np.array([25,25,25,25,0.97])
 sigma = 1
-pop_size = 6
-snake_optimization = CMAES(initial_mean=initial_mean,sigma=sigma,popsize=pop_size)
+pop_size = 10
+snake_optimization = CMAES(initial_mean=initial_mean,sigma=sigma,popsize=pop_size,generations_to_run = 40)
 snake_problem = SnakeProblem()
 answer = snake_optimization.run(snake_problem)
 print(answer)

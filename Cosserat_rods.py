@@ -524,7 +524,7 @@ Butterfly
 # butterfly = CosseratRod(number_of_elements=n_elem, total_length=total_length, density=density, radius=base_radius, \
 #                   direction=direction,normal=normal, youngs_modulus=youngs_modulus, \
 #                   dt=dt, total_time=final_time, dissipation_constant = dissipation_constant, \
-#                   shear_modulus=shear_modulus, fixed_BC=False, stretchable=True)
+#                   shear_modulus=shear_modulus, fixed_BC=False)
 # butterfly.positions = positions
 # butterfly.tangents = butterfly.positions[:, 1:] - butterfly.positions[:, :-1]
 # butterfly.tangents = np.divide(butterfly.tangents, butterfly.current_lengths)
@@ -538,7 +538,7 @@ Butterfly
 # gravity = GravityForces()
 # butterfly.add_forces_torques(gravity)
 # butterfly.run()
-# plot_video(butterfly.callback_params,xlim=[-1,3],ylim=[-20,1.0],every=5)
+# dynamic_plotting_v2(butterfly.callback_params,xlim=[-1,3],ylim=[-0.5,1.5],every=100)
 """
 Extra benchmark, gravity on, center node holding up
 """
