@@ -1,0 +1,62 @@
+Imagine what you could do here. At Apple, new ideas have a way of becoming extraordinary products, services, and customer experiences very quickly. Bring passion and dedication to your job and there's no telling what you could accomplish. Dynamic, smart people and inspiring, innovative technologies are the norm here. The people who work here have reinvented entire industries with all Apple Hardware products. The same passion for innovation that goes into our products also applies to our practices strengthening our commitment to leave the world better than we found it. Join us to help deliver the next groundbreaking Apple product. Do you love working on challenges that no one has solved yet? As a member of our dynamic group, you will have the unrivaled and rewarding opportunity to craft upcoming products that will delight and inspire millions of Apple’s customers every single day.
+
+Apple is currently seeking enthusiastic Mechanical Engineering and Materials Science majors who can start work anytime between September, 2022 to September, 2023. The interns will provide support to design, engineering, prototyping and validation activities for all hardware product lines.
+Key Qualifications
+You may meet or have interest in any one of the following qualifications:
+Ability to work in team-based environment.
+Self-motivating.
+Strong analytical/problem solving skills and ability to use statistical tools and techniques.
+Knowledge of finite element analysis theory and general mechanical engineering analysis.
+Flexibility and comfort working in a quickly changing environment.
+Desired Experience in any of the following:
+Prior experience in product design (preferably consumer electronics).
+Experience with component modules (LCD assemblies, batteries, camera modules, etc.) and their interconnect (FPC design and ACF bonding).
+Knowledge of materials science fundamentals for plastic, adhesive, metal, glass, ceramic, composite, and coating materials.
+Ability in plastic, metal, composite, and glass/ceramic part design.
+3-D CAD skills
+Experience in Design for Manufacturability (DFM), and Design for Assembly (DFA), statistical tolerance analysis techniques, functional dimensioning, and geometric tolerancing.
+Handheld, portable and/or hardware experience.
+Integration of wireless antenna (GSM, GPS, Wifi) into mechanical enclosures.
+Design of audio subsystems (microphone, speaker, receiver). Open cv, deep learning
+Unigraphics or Pro-engineer fluency.
+machine learning
+Java
+
+Qualified applicants may be reviewed by one or more of the following teams:
+• Aerodynamics Engineering
+• Body in White Engineering
+• Charge Port Door Engineering
+• Chassis Engineering
+• Closures Engineering
+• Craftsmanship
+• Design Quality Engineering
+• Dimensional Engineering
+• Drivetrain
+• Drive Inverter
+• Drive Systems Structures
+• Exteriors Engineering
+• Geartrain
+• Interiors Engineering
+• Mechanical Drive Systems
+• Motor Design
+• New Programs Engineering
+• Noise, Vibration, & Harshness Engineering
+• Passive Safety Engineering
+• Power Electronics Hardware
+• Research & Development
+• Restraints Design Engineering
+• Seat Design Engineering
+• Thermal Engineering
+• Vehicle Controls & Vibrations
+• Vehicle Integration
+
+Requirements
+
+What You’ll Bring
+• Currently working towards a BS, MS, or advanced degree in a relevant engineering program such as Mechanical Engineering, Automotive Engineering, Aerospace Engineering, or Mechatronics.
+• Proficiency designing in a 3D CAD software (CATIA proficiency is a plus).
+• Experience creating engineering drawings (GD&T experience is a plus).
+• Proven interest in mechanical design engineering through extracurricular activities, academic projects, passion projects, or equivalent experiences (proven automotive or sustainability interest is a plus).
+• Excellent grasp of engineering fundamentals.
+• Eagerness to collaborate cross-functionally with other engineering teams while able to work independently; detail-oriented and execution focused.
+• Genuine curiosity and willingness to understand how our products are designed, built and how they operate

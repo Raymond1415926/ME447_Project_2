@@ -1,0 +1,1 @@
+When dealing with word weights for keywords selection use: TF-IDF (Term Frequency x Inverse Document Frequency) algorithm.
